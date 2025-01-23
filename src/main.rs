@@ -1,12 +1,11 @@
 use ggez::{Context, GameResult};
 use ggez::graphics::{self, Color, DrawMode, Rect,};
 use ggez::event::{self, MouseButton};
-//use ggez::input::mouse;
 use ggez::input::keyboard::{KeyCode, KeyInput};
 use rand::Rng;
 
-const GRID_WIDTH: usize = 100;
-const GRID_HEIGHT: usize = 100;
+const GRID_WIDTH: usize = 50;
+const GRID_HEIGHT: usize = 50;
 const CELL_SIZE: f32 = 5.0;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -17,12 +16,17 @@ enum Cell {
     Water,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum SelectedCell {
+    Sand,
+    Wood,
+    Water,
+}
+
 struct MainState {
     grid: [[Cell; GRID_WIDTH]; GRID_HEIGHT],
     is_mouse_down: bool,
-    is_wood: bool,
-    is_sand: bool,
-    is_water: bool,
+    selected_cell: SelectedCell,
 }
 
 impl MainState {
@@ -36,31 +40,28 @@ impl MainState {
         Ok(MainState {
             grid,
             is_mouse_down: false,
-            is_sand: true,
-            is_wood: false,
-            is_water: false,
+            selected_cell: SelectedCell::Sand
         })
     }
 
     fn update_sand(&mut self) {
-        for y in (0..GRID_HEIGHT - 1).rev() { // Traverse grid bottom to top
+        for y in (0..GRID_HEIGHT - 1).rev() { 
             for x in 0..GRID_WIDTH {
                 if self.grid[y][x] == Cell::Sand {
-                    // Try moving sand down
+                    // Piasek spada w dół
                     if self.grid[y + 1][x] == Cell::Empty {
                         self.grid[y + 1][x] = Cell::Sand;
                         self.grid[y][x] = Cell::Empty;
                     } else if self.grid[y + 1][x] == Cell::Water {
-                        // If there's water below, sand sinks into it without removing the water
-                        // The sand just moves to the water's position, simulating sinking
+                        // Jeśli piasek spada do wody to tonie
                         self.grid[y + 1][x] = Cell::Sand;
                         self.grid[y][x] = Cell::Empty;
                     } else if x > 0 && self.grid[y + 1][x - 1] == Cell::Empty {
-                        // Sand moves left
+                        // Piasek spada w lewo
                         self.grid[y + 1][x - 1] = Cell::Sand;
                         self.grid[y][x] = Cell::Empty;
                     } else if x < GRID_WIDTH - 1 && self.grid[y + 1][x + 1] == Cell::Empty {
-                        // Sand moves right
+                        // Piasek spada w prawo
                         self.grid[y + 1][x + 1] = Cell::Sand;
                         self.grid[y][x] = Cell::Empty;
                     }
@@ -70,34 +71,35 @@ impl MainState {
     }
     
     fn update_water(&mut self) {
-        for y in (0..GRID_HEIGHT - 1).rev() { // Traverse grid bottom to top
+        for y in (0..GRID_HEIGHT - 1).rev() { 
             for x in 0..GRID_WIDTH {
                 if self.grid[y][x] == Cell::Water {
-                    // Try moving water down
+            
                     if self.grid[y + 1][x] == Cell::Empty {
                         self.grid[y + 1][x] = Cell::Water;
                         self.grid[y][x] = Cell::Empty;
                     } 
-                    // Water moves left diagonally
+                    
                     else if x > 0 && self.grid[y + 1][x - 1] == Cell::Empty {
                         self.grid[y + 1][x - 1] = Cell::Water;
                         self.grid[y][x] = Cell::Empty;
                     } 
-                    // Water moves right diagonally
+                    
                     else if x < GRID_WIDTH - 1 && self.grid[y + 1][x + 1] == Cell::Empty {
                         self.grid[y + 1][x + 1] = Cell::Water;
                         self.grid[y][x] = Cell::Empty;
                     } 
-                    // Water moves left horizontally (only after down and diagonal checks fail)
-                    else if x > 0 && self.grid[y][x - 1] == Cell::Empty {
-                        self.grid[y][x - 1] = Cell::Water;
-                        self.grid[y][x] = Cell::Empty;
-                    } 
-                    // Water moves right horizontally (only after down and diagonal checks fail)
+                    
                     else if x < GRID_WIDTH - 1 && self.grid[y][x + 1] == Cell::Empty {
                         self.grid[y][x + 1] = Cell::Water;
                         self.grid[y][x] = Cell::Empty;
                     }
+                    else if x > 0 && self.grid[y][x - 1] == Cell::Empty {
+                        self.grid[y][x - 1] = Cell::Water;
+                        self.grid[y][x] = Cell::Empty;
+                    } 
+                    
+                    
                 }
             }
         }
@@ -110,12 +112,11 @@ impl MainState {
         let grid_x = (x / CELL_SIZE) as usize;
         let grid_y = (y / CELL_SIZE) as usize;
     
-        let mut rng = rand::thread_rng();  // Random number generator
+        let mut rng = rand::thread_rng();  
     
         for _ in 0..num_particles {
-            let offset_x = rng.gen_range(-1..=1);  // Random offset in x direction (-1, 0, or 1)
-            let offset_y = rng.gen_range(-1..=1);  // Random offset in y direction (-1, 0, or 1)
-    
+            let offset_x = rng.gen_range(-1..=1); 
+            let offset_y = rng.gen_range(-1..=1);  
             let new_x = grid_x as isize + offset_x;
             let new_y = grid_y as isize + offset_y;
     
@@ -166,17 +167,13 @@ impl MainState {
 
 impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        if self.is_mouse_down && self.is_sand{
+        if self.is_mouse_down {
             let pos = ctx.mouse.position();
-            self.add_sand(pos.x, pos.y, 5);
-        }
-        else if self.is_mouse_down && self.is_wood{
-            let pos = ctx.mouse.position();
-            self.add_wood(pos.x, pos.y, 5);
-        }
-        else if self.is_mouse_down && self.is_water{
-            let pos = ctx.mouse.position();
-            self.add_water(pos.x, pos.y, 5);
+            match self.selected_cell {
+                SelectedCell::Sand => self.add_sand(pos.x, pos.y, 5),
+                SelectedCell::Wood => self.add_wood(pos.x, pos.y, 5),
+                SelectedCell::Water => self.add_water(pos.x, pos.y, 5),
+            }
         }
         self.update_sand();
         self.update_water();
@@ -252,19 +249,13 @@ impl event::EventHandler for MainState {
         ) -> Result<(), ggez::GameError> {
         match input.keycode {
             Some(KeyCode::D) => {
-                self.is_sand = false;
-                self.is_wood = true;
-                self.is_water = false;
+                self.selected_cell = SelectedCell::Wood
             }
             Some(KeyCode::P) => {
-                self.is_sand = true;
-                self.is_wood = false;
-                self.is_water = false;
+                self.selected_cell = SelectedCell::Sand
             }
             Some(KeyCode::W) => {
-                self.is_sand = false;
-                self.is_wood = false;
-                self.is_water = true;
+                self.selected_cell = SelectedCell::Water
             }
             _ => (),
         }
